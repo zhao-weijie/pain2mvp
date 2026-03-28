@@ -1,0 +1,10 @@
+## openclaw context files
+setup.md
+brightdata/
+tests/
+
+## Setup files
+.tmp-github-config-check/
+
+## cache
+.DS_Store
