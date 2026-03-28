@@ -6,127 +6,76 @@ metadata: { "openclaw": { "skillKey": "painpoint-to-prd", "requires": { "bins": 
 
 # Painpoint To PRD
 
-## What this skill does
-
-Use this skill in two modes:
+## Modes
 
 1. Discovery mode: find and rank product opportunities from public user discussion evidence.
 2. PRD mode: turn one persisted opportunity into a lightweight PRD for a coding agent.
 
-If the user asks for both, discovery always comes first.
+If the user asks for both, discovery comes first.
 
-## Source of truth
+## Hard Rules
 
-- `references/contracts.md` is the only reference contract for scoring, payloads, TiDB persistence, and PRD handoff.
-- TiDB Cloud Zero is the canonical store for evidence, opportunities, and PRDs.
-- The current OpenClaw model remains the default for all work in v1.
+- `references/contracts.md` is the only runtime contract reference.
+- Do not read `pain2mvp/scripts/*` during normal runs.
+- Only inspect scripts when a documented helper command fails unexpectedly or when explicitly modifying this skill.
+- Read `references/contracts.md` once per run, not repeatedly.
 
-## Required environment
+## Preferred Commands
 
-- Bright Data credentials must be present for evidence collection.
-- `TIDB_DATABASE_URL` must be present for any persistence or PRD retrieval.
-- `TIDB_DATABASE_URL` must include a database name and `?sslaccept=strict`.
-
-When required environment is missing:
-
-- fail early
-- say exactly which variable is missing or invalid
-- do not continue with partial persistence
-
-## Command surface
-
-Use these repo-local commands:
+Use these commands for normal operation:
 
 - `npm run bootstrap:tidb`
-- `npm run tidb -- save-evidence`
-- `npm run tidb -- save-opportunity`
+- `npm run tidb -- save-evidence-batch`
+- `npm run tidb -- save-opportunity-batch`
 - `npm run tidb -- get-opportunity`
 - `npm run tidb -- save-prd`
 - `npm run tidb -- get-prd`
 - `npm run tidb -- list-runs`
 
-All payload shapes are defined in `references/contracts.md`.
+Compatibility-only commands:
 
-## Workflow routing
+- `npm run tidb -- save-evidence`
+- `npm run tidb -- save-opportunity`
 
-### Discovery mode
+Use the single-row save commands only for manual recovery or compatibility flows.
 
-Use this for:
+## Normal Execution Defaults
 
-- idea-led research
-- user-group research
-- competitor complaint research
-- mixed requests that need ranking before scoping
+- Check required environment once per run.
+- Collect evidence first, then persist in batch.
+- Prefer JSON via stdin over temp files.
+- Use `--input-file` only when the payload is too large or awkward for stdin.
 
-Steps:
+## Discovery Mode
 
-1. Normalize the brief.
-   - combine idea, user group, and competitor signals when present
-   - infer synonyms and adjacent workflow terms
-   - default to the last 12 months of discussion and favor the last 180 days in ranking
-2. Collect evidence with the Bright Data scripts already available in the environment.
-   - use the configured search and scrape scripts
-   - favor concrete workflow pain, failed workarounds, switching intent, and complaint threads
-   - down-rank praise, memes, and unsupported wishlists
-3. Persist raw evidence to `agent_memory` with `save-evidence`.
-4. Cluster evidence into underlying pains.
-   - merge phrasing variants for the same job
-   - split clusters when root cause differs
-5. Score and rank opportunities using `references/contracts.md`.
-6. Persist ranked opportunities with `save-opportunity`.
-7. Return a ranked summary that includes:
-   - `run_id`
-   - `opportunity_id`
-   - score
-   - confidence
-   - contradictions or caveats
-   - suggested next cuts
+1. Read `references/contracts.md` once.
+2. Check required environment.
+3. Collect evidence with the configured Bright Data tools.
+4. Persist all evidence with `save-evidence-batch`.
+5. Cluster and rank opportunities using the contract rubric.
+6. Persist ranked opportunities with `save-opportunity-batch`.
+7. Return a ranked summary with `run_id`, `opportunity_id`, score, confidence, and caveats.
 
-### PRD mode
+## PRD Mode
 
-Use this when the user wants a brief for one specific opportunity.
-
-Steps:
-
-1. Resolve the target opportunity.
-   - prefer user-supplied `opportunity_id`
-   - otherwise use an explicit `run_id` plus rank
-   - if neither is provided, fetch the latest valid opportunity only when the choice is unambiguous
+1. Resolve the target opportunity by `opportunity_id`, or by `run_id` plus rank when explicitly provided.
 2. Read the persisted opportunity with `get-opportunity`.
-3. Generate the PRD from the persisted opportunity and its evidence, not from chat memory.
-4. Persist the final PRD with `save-prd`.
-5. Return the PRD in human-readable form and include the stored `prd_id`.
+3. Generate the PRD from the persisted opportunity and its evidence, not chat memory.
+4. Persist the PRD with `save-prd`.
+5. Return the human-readable PRD and include `prd_id`.
 
-## Optional subagents
+## Non-Drift Rules
 
-- Default path is single-agent.
-- Use optional worker agents only when the brief is broad enough to justify sharding evidence collection.
-- Workers may only return `WorkerEvidenceBundle`.
-- The coordinator is the only role allowed to:
-  - cluster evidence
-  - score opportunities
-  - write `opportunity_snapshots`
-  - write `prds`
-
-## Non-drift rules
-
-- Never invent SQL in prompts. Use the helper scripts.
+- Never invent SQL. Use the documented helper commands.
 - Never generate a PRD from an unpersisted opportunity summary.
 - Never use conversational numbering like "opportunity #2" as the only identifier once results are persisted.
-- Never claim product-market fit. This workflow produces directional evidence, not final validation.
+- Never claim product-market fit.
 - When evidence is weak, say `insufficient evidence`.
 - Preserve contradictions when sources disagree.
 
-## Quality bar
+## Quality Bar
 
 - Prefer repeated, concrete complaints over clever one-offs.
-- Distinguish category pain from vendor-specific pricing, support, or policy complaints.
+- Distinguish category pain from vendor-specific complaints.
 - Keep evidence traceable through `source_url`, `pain_cluster_id`, and persisted identifiers.
 - Optimize PRDs for a coding agent with explicit scope, non-goals, constraints, and acceptance criteria.
-
-## Example triggers
-
-- "What are the top pain points for in-house intellectual property professionals?"
-- "What are Harvey users complaining about?"
-- "Turn the latest high-confidence opportunity into a PRD."
-- "Generate a PRD from opportunity `opp_20260328_01`."

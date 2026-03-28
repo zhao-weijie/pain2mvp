@@ -1,164 +1,35 @@
 # Painpoint To PRD Contracts
 
-This file is the single reference contract for discovery, scoring, TiDB persistence, and PRD handoff.
+This file is the runtime contract for discovery, persistence, and PRD generation.
 
-## Operating model
+Runtime note:
 
-- TiDB Cloud Zero is the canonical artifact store.
-- `agent_memory` stores raw evidence rows.
-- `opportunity_snapshots` stores ranked opportunities.
-- `prds` stores final PRDs in both structured and markdown form.
-- The coordinator is the only role allowed to score, rank, persist opportunities, or persist PRDs.
-- Optional worker agents may only return `WorkerEvidenceBundle`.
+- `scripts/` is not part of the runtime interface.
+- The supported interface is `npm run tidb -- <command>`.
 
-## Scoring rubric
+## Scoring Rubric
 
-Score each opportunity from `0-100` using this breakdown:
+Score each opportunity from `0-100`:
 
-- `recurrence` (`0-25`): repeated pain across independent users, threads, or communities
-- `severity_and_urgency` (`0-20`): clear workflow, deadline, quality, or compliance harm
-- `workaround_burden` (`0-20`): copy-paste chains, spreadsheets, repeated review loops, brittle tool stitching
-- `buying_or_switching_signal` (`0-15`): willingness to pay, switch, or actively seek alternatives
-- `evidence_quality_and_freshness` (`0-20`): recent, concrete, independently corroborated evidence
+- `recurrence` (`0-25`)
+- `severity_and_urgency` (`0-20`)
+- `workaround_burden` (`0-20`)
+- `buying_or_switching_signal` (`0-15`)
+- `evidence_quality_and_freshness` (`0-20`)
 
-Confidence is separate from score:
+Confidence is separate:
 
-- `High`: repeated, recent, concrete, and corroborated
-- `Medium`: directional but patchy or source-concentrated
-- `Low`: interesting hypothesis with thin evidence
+- `High`
+- `Medium`
+- `Low`
 
-Use `insufficient evidence` when the evidence is too weak to rank confidently.
+Use `insufficient evidence` when ranking is too weak to support confidence.
 
-## EvidenceRow
+## Payloads
 
-Use this payload with `save-evidence`.
+### `EvidenceRow`
 
-```json
-{
-  "source_url": "https://example.com/thread",
-  "source_type": "reddit_comment",
-  "author_handle": "user123",
-  "community_or_site": "r/startups",
-  "published_at": "2026-03-20T12:00:00Z",
-  "snippet": "We still stitch three tools together and miss deadlines.",
-  "pain_cluster_id": "run_20260328:cluster_a",
-  "engagement_signals": {
-    "score": 18,
-    "comments": 6
-  },
-  "retrieval_timestamp": "2026-03-28T13:00:00Z",
-  "traceability_status": "verified"
-}
-```
-
-## WorkerEvidenceBundle
-
-Workers return only evidence and collection notes.
-
-```json
-{
-  "run_id": "run_20260328_01",
-  "worker_id": "worker_reddit_competitor_a",
-  "query_scope": {
-    "source": "reddit",
-    "query_family": "competitor complaints"
-  },
-  "evidence_rows": [
-    {
-      "source_url": "https://example.com/thread",
-      "source_type": "reddit_post",
-      "author_handle": "user123",
-      "community_or_site": "r/legaltech",
-      "published_at": "2026-03-20T12:00:00Z",
-      "snippet": "The workflow is manual and hard to review.",
-      "pain_cluster_id": "run_20260328_01:cluster_a",
-      "engagement_signals": {
-        "score": 41
-      },
-      "retrieval_timestamp": "2026-03-28T13:00:00Z",
-      "traceability_status": "verified"
-    }
-  ],
-  "notes": "No high-signal Hacker News threads found for this slice."
-}
-```
-
-## OpportunitySnapshot
-
-Use this payload with `save-opportunity`.
-
-```json
-{
-  "opportunity_id": "opp_20260328_01",
-  "run_id": "run_20260328_01",
-  "rank": 1,
-  "title": "Review-safe drafting workflow for in-house IP teams",
-  "affected_user": "In-house IP counsel at lean legal teams",
-  "job_to_be_done": "Draft and review work product faster without introducing compliance risk",
-  "pain_statement": "Teams lose time and confidence when drafting requires manual stitching and repeated review passes.",
-  "score_total": 83,
-  "score_breakdown_json": {
-    "recurrence": 21,
-    "severity_and_urgency": 18,
-    "workaround_burden": 17,
-    "buying_or_switching_signal": 11,
-    "evidence_quality_and_freshness": 16
-  },
-  "confidence": "High",
-  "confidence_reason": "Repeated and recent complaints across multiple threads with concrete workflow details.",
-  "pain_cluster_key": "run_20260328_01:cluster_a",
-  "supporting_evidence_json": [
-    {
-      "source_url": "https://example.com/thread",
-      "note": "Manual review loop complaint"
-    }
-  ],
-  "contradictions_json": [
-    {
-      "note": "Some users tolerate the workflow when volume is low."
-    }
-  ],
-  "query_scope_json": {
-    "sources": ["reddit", "hacker_news"],
-    "date_range_days": 365
-  }
-}
-```
-
-## PrdRecord
-
-Use this payload with `save-prd`.
-
-```json
-{
-  "prd_id": "prd_20260328_01",
-  "run_id": "run_20260328_01",
-  "opportunity_id": "opp_20260328_01",
-  "title": "Review-safe drafting assistant",
-  "status": "draft",
-  "target_user": "In-house IP counsel",
-  "goal": "Reduce manual drafting and review loops for the first high-confidence slice.",
-  "structured_prd_json": {
-    "problem": "Drafting is slow and brittle.",
-    "target_user": {
-      "primary_user": "In-house IP counsel",
-      "context_of_use": "Lean legal teams with deadlines"
-    },
-    "goal": "Deliver a thin slice that speeds drafting while preserving reviewability."
-  },
-  "markdown_snapshot": "# Lightweight PRD: Review-safe drafting assistant\n\n## Problem\nDrafting is slow and brittle.",
-  "source_evidence_json": [
-    {
-      "opportunity_id": "opp_20260328_01",
-      "source_url": "https://example.com/thread"
-    }
-  ]
-}
-```
-
-## TiDB column mapping
-
-### `agent_memory`
+Required fields:
 
 - `source_url`
 - `source_type`
@@ -171,7 +42,59 @@ Use this payload with `save-prd`.
 - `retrieval_timestamp`
 - `traceability_status`
 
-### `opportunity_snapshots`
+```json
+{
+  "source_url": "https://example.com/thread",
+  "source_type": "reddit_comment",
+  "author_handle": "user123",
+  "community_or_site": "r/startups",
+  "published_at": "2026-03-20T12:00:00Z",
+  "snippet": "We still stitch three tools together.",
+  "pain_cluster_id": "run_20260328_01:cluster_a",
+  "engagement_signals": { "score": 18 },
+  "retrieval_timestamp": "2026-03-28T13:00:00Z",
+  "traceability_status": "verified"
+}
+```
+
+### `WorkerEvidenceBundle`
+
+Workers may return only this payload.
+
+Required fields:
+
+- `run_id`
+- `worker_id`
+- `query_scope`
+- `evidence_rows`
+- `notes`
+
+```json
+{
+  "run_id": "run_20260328_01",
+  "worker_id": "worker_reddit_a",
+  "query_scope": { "source": "reddit", "query_family": "competitor complaints" },
+  "evidence_rows": [
+    {
+      "source_url": "https://example.com/thread",
+      "source_type": "reddit_post",
+      "author_handle": "user123",
+      "community_or_site": "r/legaltech",
+      "published_at": "2026-03-20T12:00:00Z",
+      "snippet": "The workflow is manual and hard to review.",
+      "pain_cluster_id": "run_20260328_01:cluster_a",
+      "engagement_signals": { "score": 41 },
+      "retrieval_timestamp": "2026-03-28T13:00:00Z",
+      "traceability_status": "verified"
+    }
+  ],
+  "notes": "No strong Hacker News threads found."
+}
+```
+
+### `OpportunitySnapshot`
+
+Required fields:
 
 - `opportunity_id`
 - `run_id`
@@ -188,9 +111,30 @@ Use this payload with `save-prd`.
 - `supporting_evidence_json`
 - `contradictions_json`
 - `query_scope_json`
-- `created_at`
 
-### `prds`
+```json
+{
+  "opportunity_id": "opp_20260328_01",
+  "run_id": "run_20260328_01",
+  "rank": 1,
+  "title": "Review-safe drafting workflow",
+  "affected_user": "In-house IP counsel",
+  "job_to_be_done": "Draft and review faster without adding risk",
+  "pain_statement": "Manual stitching creates slow review loops.",
+  "score_total": 83,
+  "score_breakdown_json": { "recurrence": 21, "severity_and_urgency": 18 },
+  "confidence": "High",
+  "confidence_reason": "Repeated recent complaints with concrete workflow detail.",
+  "pain_cluster_key": "run_20260328_01:cluster_a",
+  "supporting_evidence_json": [{ "source_url": "https://example.com/thread" }],
+  "contradictions_json": [{ "note": "Lower pain at low volume" }],
+  "query_scope_json": { "sources": ["reddit"], "date_range_days": 365 }
+}
+```
+
+### `PrdRecord`
+
+Required fields:
 
 - `prd_id`
 - `run_id`
@@ -202,95 +146,135 @@ Use this payload with `save-prd`.
 - `structured_prd_json`
 - `markdown_snapshot`
 - `source_evidence_json`
-- `created_at`
-- `updated_at`
 
-## Helper script commands
+```json
+{
+  "prd_id": "prd_20260328_01",
+  "run_id": "run_20260328_01",
+  "opportunity_id": "opp_20260328_01",
+  "title": "Review-safe drafting assistant",
+  "status": "draft",
+  "target_user": "In-house IP counsel",
+  "goal": "Reduce manual drafting and review loops.",
+  "structured_prd_json": { "problem": "Drafting is slow and brittle." },
+  "markdown_snapshot": "# Lightweight PRD: Review-safe drafting assistant",
+  "source_evidence_json": [{ "source_url": "https://example.com/thread" }]
+}
+```
+
+## Command Interface
 
 All commands accept JSON via stdin or `--input-file <path>`.
 
+Success envelope:
+
+```json
+{ "ok": true, "command": "name", "result": {} }
+```
+
+Failure envelope:
+
+```json
+{ "ok": false, "error": "message" }
+```
+
+Preferred discovery flow:
+
+1. collect evidence
+2. `save-evidence-batch`
+3. cluster and rank
+4. `save-opportunity-batch`
+
+Preferred commands:
+
+- `save-evidence-batch`
+- `save-opportunity-batch`
+- `get-opportunity`
+- `save-prd`
+- `get-prd`
+- `list-runs`
+
+Compatibility/manual recovery commands:
+
+- `save-evidence`
+- `save-opportunity`
+
 ### `save-evidence`
 
-- Input: `EvidenceRow`
-- Output:
+Input: `EvidenceRow`
+
+### `save-evidence-batch`
+
+Input:
 
 ```json
 {
-  "ok": true,
-  "command": "save-evidence",
-  "result": {
-    "ok": true,
-    "command": "save-evidence",
-    "pain_cluster_id": "run_20260328:cluster_a",
-    "source_url": "https://example.com/thread"
-  }
+  "run_id": "run_20260328_01",
+  "evidence_rows": [{ "source_url": "https://example.com/thread", "source_type": "reddit_comment" }]
 }
 ```
+
+Result fields:
+
+- `run_id`
+- `saved_count`
 
 ### `save-opportunity`
 
-- Input: `OpportunitySnapshot`
-- Output:
+Input: `OpportunitySnapshot`
+
+### `save-opportunity-batch`
+
+Input:
 
 ```json
 {
-  "ok": true,
-  "command": "save-opportunity",
-  "result": {
-    "ok": true,
-    "command": "save-opportunity",
-    "run_id": "run_20260328_01",
-    "opportunity_id": "opp_20260328_01"
-  }
+  "run_id": "run_20260328_01",
+  "opportunities": [{ "opportunity_id": "opp_20260328_01", "rank": 1 }]
 }
 ```
+
+Result fields:
+
+- `run_id`
+- `saved_count`
 
 ### `get-opportunity`
 
-- Input: `{"opportunity_id":"opp_20260328_01"}` or `{"run_id":"run_20260328_01","rank":1}`
-- Output: one `OpportunitySnapshot`
+Input:
+
+- `{"opportunity_id":"opp_20260328_01"}`
+- `{"run_id":"run_20260328_01","rank":1}`
 
 ### `save-prd`
 
-- Input: `PrdRecord`
-- Output:
-
-```json
-{
-  "ok": true,
-  "command": "save-prd",
-  "result": {
-    "ok": true,
-    "command": "save-prd",
-    "prd_id": "prd_20260328_01",
-    "opportunity_id": "opp_20260328_01",
-    "run_id": "run_20260328_01"
-  }
-}
-```
+Input: `PrdRecord`
 
 ### `get-prd`
 
-- Input: `{"prd_id":"prd_20260328_01"}`, `{"opportunity_id":"opp_20260328_01"}`, `{"run_id":"run_20260328_01"}`, or `{"latest":true}`
-- Output: one `PrdRecord`
+Input:
+
+- `{"prd_id":"prd_20260328_01"}`
+- `{"opportunity_id":"opp_20260328_01"}`
+- `{"run_id":"run_20260328_01"}`
+- `{"latest":true}`
 
 ### `list-runs`
 
-- Input: optional empty object
-- Output: newest-first run metadata derived from `opportunity_snapshots`
+Input: optional empty object
 
-## PRD generation rules
+## PRD Rules
 
 - Generate a PRD only from a persisted `OpportunitySnapshot`.
-- Carry forward the strongest evidence and constraints instead of inventing scope.
-- Optimize for a coding agent, not an executive audience.
+- Carry forward evidence and constraints instead of inventing scope.
+- Optimize for a coding agent.
 - Prefer a thin vertical slice.
-- Include explicit non-goals, constraints, and acceptance criteria.
+- Include non-goals, constraints, and acceptance criteria.
 
-## Output quality rules
+## Output Rules
 
 - Prefer repeated, concrete complaints over clever one-offs.
-- Separate category pain from vendor-specific pricing, support, or trust complaints.
+- Separate category pain from vendor-specific complaints.
 - Preserve contradictions when evidence conflicts.
 - Down-rank hype, memes, and unsupported wishlists.
 - Keep evidence traceable through `source_url` and `pain_cluster_id`.

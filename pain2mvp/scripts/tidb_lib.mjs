@@ -90,6 +90,9 @@ const EVIDENCE_FIELDS = [
   "traceability_status",
 ];
 
+const EVIDENCE_BATCH_FIELDS = ["run_id", "evidence_rows"];
+const OPPORTUNITY_BATCH_FIELDS = ["run_id", "opportunities"];
+
 export function fail(message, details) {
   const error = new Error(message);
   if (details !== undefined) {
@@ -208,6 +211,18 @@ export function normalizeEvidenceRow(payload) {
   };
 }
 
+export function normalizeEvidenceBatchPayload(payload) {
+  requireFields(payload, EVIDENCE_BATCH_FIELDS, "save-evidence-batch");
+  if (!Array.isArray(payload.evidence_rows) || payload.evidence_rows.length === 0) {
+    fail("save-evidence-batch requires a non-empty evidence_rows array");
+  }
+
+  return {
+    run_id: payload.run_id,
+    evidence_rows: payload.evidence_rows.map((row) => normalizeEvidenceRow(row)),
+  };
+}
+
 export function normalizeOpportunitySnapshot(payload) {
   requireFields(payload, OPPORTUNITY_FIELDS, "save-opportunity");
   return {
@@ -221,6 +236,18 @@ export function normalizeOpportunitySnapshot(payload) {
   };
 }
 
+export function normalizeOpportunityBatchPayload(payload) {
+  requireFields(payload, OPPORTUNITY_BATCH_FIELDS, "save-opportunity-batch");
+  if (!Array.isArray(payload.opportunities) || payload.opportunities.length === 0) {
+    fail("save-opportunity-batch requires a non-empty opportunities array");
+  }
+
+  return {
+    run_id: payload.run_id,
+    opportunities: payload.opportunities.map((row) => normalizeOpportunitySnapshot(row)),
+  };
+}
+
 export function normalizePrdRecord(payload) {
   requireFields(payload, PRD_FIELDS, "save-prd");
   return {
@@ -230,8 +257,7 @@ export function normalizePrdRecord(payload) {
   };
 }
 
-export async function saveEvidence(conn, payload) {
-  const row = normalizeEvidenceRow(payload);
+async function insertEvidenceRow(conn, row) {
   await conn.execute(
     `INSERT INTO agent_memory (
       source_url,
@@ -258,6 +284,11 @@ export async function saveEvidence(conn, payload) {
       row.traceability_status,
     ],
   );
+}
+
+export async function saveEvidence(conn, payload) {
+  const row = normalizeEvidenceRow(payload);
+  await insertEvidenceRow(conn, row);
 
   return {
     ok: true,
@@ -267,8 +298,21 @@ export async function saveEvidence(conn, payload) {
   };
 }
 
-export async function saveOpportunity(conn, payload) {
-  const row = normalizeOpportunitySnapshot(payload);
+export async function saveEvidenceBatch(conn, payload) {
+  const batch = normalizeEvidenceBatchPayload(payload);
+  for (const row of batch.evidence_rows) {
+    await insertEvidenceRow(conn, row);
+  }
+
+  return {
+    ok: true,
+    command: "save-evidence-batch",
+    run_id: batch.run_id,
+    saved_count: batch.evidence_rows.length,
+  };
+}
+
+async function upsertOpportunityRow(conn, row) {
   await conn.execute(
     `INSERT INTO opportunity_snapshots (
       opportunity_id,
@@ -320,12 +364,31 @@ export async function saveOpportunity(conn, payload) {
       row.query_scope_json,
     ],
   );
+}
+
+export async function saveOpportunity(conn, payload) {
+  const row = normalizeOpportunitySnapshot(payload);
+  await upsertOpportunityRow(conn, row);
 
   return {
     ok: true,
     command: "save-opportunity",
     run_id: row.run_id,
     opportunity_id: row.opportunity_id,
+  };
+}
+
+export async function saveOpportunityBatch(conn, payload) {
+  const batch = normalizeOpportunityBatchPayload(payload);
+  for (const row of batch.opportunities) {
+    await upsertOpportunityRow(conn, row);
+  }
+
+  return {
+    ok: true,
+    command: "save-opportunity-batch",
+    run_id: batch.run_id,
+    saved_count: batch.opportunities.length,
   };
 }
 
@@ -438,8 +501,12 @@ export async function dispatchCommand(conn, command, payload) {
   switch (command) {
     case "save-evidence":
       return saveEvidence(conn, payload);
+    case "save-evidence-batch":
+      return saveEvidenceBatch(conn, payload);
     case "save-opportunity":
       return saveOpportunity(conn, payload);
+    case "save-opportunity-batch":
+      return saveOpportunityBatch(conn, payload);
     case "get-opportunity":
       return getOpportunity(conn, payload);
     case "save-prd":
