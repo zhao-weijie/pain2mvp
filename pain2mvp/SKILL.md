@@ -1,7 +1,7 @@
 ---
 name: painpoint-to-prd
 description: discover and structure product opportunities from public user discussions, then convert a selected opportunity into a lightweight prd for a coding agent. use when the user wants to mine reddit or hacker news for recurring pain points, unmet needs, competitor complaints, or market signals around an idea, user group, or product category, or when the user wants to turn one identified opportunity into a scoped brief for codex or claude code.
-metadata: { "openclaw": { "skillKey": "painpoint-to-prd", "requires": { "bins": ["node", "npm"] } } }
+metadata: { "openclaw": { "skillKey": "painpoint-to-prd", "requires": { "bins": ["node", "npm"], "env": ["TIDB_DATABASE_URL"] }, "primaryEnv": "TIDB_DATABASE_URL" } }
 ---
 
 # Painpoint To PRD
