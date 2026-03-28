@@ -1,0 +1,14 @@
+{
+  "name": "pain2mvp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bootstrap:tidb": "node pain2mvp/scripts/bootstrap_tidb.mjs",
+    "tidb": "node pain2mvp/scripts/tidb_tool.mjs",
+    "test": "node --test pain2mvp/scripts/*.test.mjs"
+  },
+  "dependencies": {
+    "@tidbcloud/serverless": "^0.3.0"
+  }
+}

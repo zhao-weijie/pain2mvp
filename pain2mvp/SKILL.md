@@ -5,95 +5,127 @@ description: discover and structure product opportunities from public user discu
 
 # Painpoint To PRD
 
-## Overview
+## What this skill does
 
 Use this skill in two modes:
 
-1. Discovery mode: produce a scored opportunities list from Reddit and Hacker News evidence.
-2. PRD mode: turn one selected opportunity into a lightweight PRD optimized for Codex or Claude Code.
+1. Discovery mode: find and rank product opportunities from public user discussion evidence.
+2. PRD mode: turn one persisted opportunity into a lightweight PRD for a coding agent.
 
-If the user asks for both, do discovery first and only draft a PRD for the highest-ranked or explicitly selected opportunity.
+If the user asks for both, discovery always comes first.
 
-## Workflow decision tree
+## Source of truth
 
-1. Classify the request.
-   - **Idea-led research**: "I am considering X. What pain points does it solve?"
-   - **User-group research**: "What are the top pain points for Y?"
-   - **Competitor-led research**: "What are users complaining about in Z?"
-   - **Handoff**: "Turn opportunity N into a build brief/PRD."
+- `references/contracts.md` is the only reference contract for scoring, payloads, TiDB persistence, and PRD handoff.
+- TiDB Cloud Zero is the canonical store for evidence, opportunities, and PRDs.
+- The current OpenClaw model remains the default for all work in v1.
 
-2. Pick the mode.
-   - Idea, user group, competitor -> follow the Discovery workflow.
-   - Selected opportunity or "turn this into a brief" -> follow the PRD workflow.
-   - Mixed request -> run Discovery first, then either use the user's chosen opportunity or default to the highest-confidence item if the user asks for an immediate PRD.
+## Required environment
 
-## Discovery workflow
+- Bright Data credentials must be present for evidence collection.
+- `TIDB_DATABASE_URL` must be present for any persistence or PRD retrieval.
+- `TIDB_DATABASE_URL` must include a database name and `?sslaccept=strict`.
 
-1. Normalize the research brief.
-   - Accept any of: idea, user group, competitor. Combine signals when multiple are given.
-   - Infer synonyms and adjacent terms before searching.
-   - Default to the last 12 months of public discussion, but prioritize the last 180 days when ranking.
-   - Search both Reddit and Hacker News. Do not treat one source as representative of the market by itself.
+When required environment is missing:
 
-2. Gather evidence using the BrightData Reddit and Hacker News tooling already available in the environment.
-   - Use the existing configured BrightData tools or scripts. Do not invent tool names or ask for secrets.
-   - Search for problem statements, workflow friction, failed workarounds, switching intent, and complaint threads.
-   - Favor posts and comments that describe a real workflow, consequence, or workaround.
-   - Down-rank generic praise, memes, and wishlists with no context.
-   - For competitor research, separate pains about missing product capability from pains about pricing, support, onboarding, trust, or policy.
+- fail early
+- say exactly which variable is missing or invalid
+- do not continue with partial persistence
 
-3. Cluster raw evidence into pain points.
-   - Merge phrasing variants into one underlying job or problem.
-   - Split clusters when the root cause differs even if the wording is similar.
-   - Track user type, source, date, and a short evidence note for each item.
+## Command surface
 
-4. Score opportunities.
-   - Use the rubric in `references/discovery-rubric.md`.
-   - Score based on recurrence, severity, workaround burden, buying signal, and evidence quality plus freshness.
-   - Report both overall score and confidence.
-   - Reduce confidence when evidence is thin, old, or isolated to one community.
-   - Do not claim product-market fit. This is directional signal, not final validation.
+Use these repo-local commands:
 
-5. Produce the output.
-   - Use the structure in `references/scored-opportunities.md`.
-   - Rank opportunities from strongest to weakest signal.
-   - Include disconfirming evidence or ambiguity where relevant.
-   - End with 3 to 5 concrete next questions or double-click directions the user could pursue.
+- `npm run bootstrap:tidb`
+- `npm run tidb -- save-evidence`
+- `npm run tidb -- save-opportunity`
+- `npm run tidb -- get-opportunity`
+- `npm run tidb -- save-prd`
+- `npm run tidb -- get-prd`
+- `npm run tidb -- list-runs`
 
-## PRD workflow
+All payload shapes are defined in `references/contracts.md`.
 
-1. Anchor on one opportunity.
-   - Use the user-selected opportunity when available.
-   - If the user asks for a PRD without selecting one, choose the highest-confidence opportunity from the latest discovery output and state that assumption clearly.
+## Workflow routing
 
-2. Preserve the evidence.
-   - Carry forward the core pain statement, target user, job to be done, main quotes or examples, and the strongest constraints implied by the evidence.
-   - Avoid inventing requirements that were not supported by the evidence or explicitly requested by the user.
+### Discovery mode
 
-3. Scope for agent autonomy.
-   - Optimize for a coding agent, not an executive audience.
-   - Prefer a thin vertical slice over a large roadmap.
-   - Make scope boundaries explicit so Codex or Claude Code can execute without drifting.
-   - State in-scope, out-of-scope, assumptions, and unresolved questions.
+Use this for:
 
-4. Produce the output.
-   - Use the structure in `references/lightweight-prd.md`.
-   - Keep it lightweight and implementation-ready.
-   - Include acceptance criteria that a coding agent could verify.
-   - Add an implementation handoff section only when it materially improves execution.
+- idea-led research
+- user-group research
+- competitor complaint research
+- mixed requests that need ranking before scoping
+
+Steps:
+
+1. Normalize the brief.
+   - combine idea, user group, and competitor signals when present
+   - infer synonyms and adjacent workflow terms
+   - default to the last 12 months of discussion and favor the last 180 days in ranking
+2. Collect evidence with the Bright Data scripts already available in the environment.
+   - use the configured search and scrape scripts
+   - favor concrete workflow pain, failed workarounds, switching intent, and complaint threads
+   - down-rank praise, memes, and unsupported wishlists
+3. Persist raw evidence to `agent_memory` with `save-evidence`.
+4. Cluster evidence into underlying pains.
+   - merge phrasing variants for the same job
+   - split clusters when root cause differs
+5. Score and rank opportunities using `references/contracts.md`.
+6. Persist ranked opportunities with `save-opportunity`.
+7. Return a ranked summary that includes:
+   - `run_id`
+   - `opportunity_id`
+   - score
+   - confidence
+   - contradictions or caveats
+   - suggested next cuts
+
+### PRD mode
+
+Use this when the user wants a brief for one specific opportunity.
+
+Steps:
+
+1. Resolve the target opportunity.
+   - prefer user-supplied `opportunity_id`
+   - otherwise use an explicit `run_id` plus rank
+   - if neither is provided, fetch the latest valid opportunity only when the choice is unambiguous
+2. Read the persisted opportunity with `get-opportunity`.
+3. Generate the PRD from the persisted opportunity and its evidence, not from chat memory.
+4. Persist the final PRD with `save-prd`.
+5. Return the PRD in human-readable form and include the stored `prd_id`.
+
+## Optional subagents
+
+- Default path is single-agent.
+- Use optional worker agents only when the brief is broad enough to justify sharding evidence collection.
+- Workers may only return `WorkerEvidenceBundle`.
+- The coordinator is the only role allowed to:
+  - cluster evidence
+  - score opportunities
+  - write `opportunity_snapshots`
+  - write `prds`
+
+## Non-drift rules
+
+- Never invent SQL in prompts. Use the helper scripts.
+- Never generate a PRD from an unpersisted opportunity summary.
+- Never use conversational numbering like "opportunity #2" as the only identifier once results are persisted.
+- Never claim product-market fit. This workflow produces directional evidence, not final validation.
+- When evidence is weak, say `insufficient evidence`.
+- Preserve contradictions when sources disagree.
 
 ## Quality bar
 
-- Prefer repeated, concrete complaints over clever one-off comments.
-- Surface contradictions. If some users love the workflow others hate, say so.
-- Distinguish pain about the problem category from pain caused by one vendor's pricing, support, or brand perception.
-- When evidence is weak, say `insufficient evidence` instead of forcing a ranking.
-- Keep quotes short and only use them to support a claim.
-- When the user asks for iteration, keep the earlier evidence model and tighten the scope instead of restarting from scratch.
+- Prefer repeated, concrete complaints over clever one-offs.
+- Distinguish category pain from vendor-specific pricing, support, or policy complaints.
+- Keep evidence traceable through `source_url`, `pain_cluster_id`, and persisted identifiers.
+- Optimize PRDs for a coding agent with explicit scope, non-goals, constraints, and acceptance criteria.
 
 ## Example triggers
 
 - "What are the top pain points for in-house intellectual property professionals?"
-- "I am considering a drafting agent for formulation patents. What unmet needs does that map to?"
 - "What are Harvey users complaining about?"
-- "Take opportunity #2 and turn it into a lightweight PRD for Claude Code."
+- "Turn the latest high-confidence opportunity into a PRD."
+- "Generate a PRD from opportunity `opp_20260328_01`."
