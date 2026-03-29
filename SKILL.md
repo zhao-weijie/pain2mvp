@@ -1,16 +1,13 @@
 ---
 name: pain2mvp
 description: Discover and structure product opportunities from public user discussions, then convert top opportunities into a lightweight PRD for a coding agent. Use when the user needs direction on what to build, or wants to find recurring pain points, unmet needs, competitor complaints, or market signals around an idea, user group, or product category.
-version: 0.1.0
+version: 1.0.2
 metadata:
   openclaw:
     install:
       - kind: brew
         formula: jq
         bins: [jq]
-      - kind: node
-        package: typescript
-        bins: [tsc]
     skillKey: pain2mvp
     requires:
       bins:

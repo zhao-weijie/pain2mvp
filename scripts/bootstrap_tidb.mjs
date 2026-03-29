@@ -8,7 +8,7 @@ try {
     ok: true,
     command: "bootstrap:tidb",
     database: databaseName,
-    tables: ["opportunity_snapshots", "prds"],
+    tables: ["opportunity_snapshots", "prds", "agent_memory"],
   });
 } catch (error) {
   printError(error);

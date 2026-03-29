@@ -46,6 +46,23 @@ CREATE TABLE IF NOT EXISTS prds (
   KEY idx_prds_opp_created (opportunity_id, created_at)
 )`;
 
+export const AGENT_MEMORY_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS agent_memory (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  source_url TEXT NOT NULL,
+  source_type VARCHAR(128) NOT NULL,
+  author_handle VARCHAR(255) NOT NULL,
+  community_or_site VARCHAR(255) NOT NULL,
+  published_at VARCHAR(128) NOT NULL,
+  snippet TEXT NOT NULL,
+  pain_cluster_id VARCHAR(128) NOT NULL,
+  engagement_signals JSON NOT NULL,
+  retrieval_timestamp VARCHAR(128) NOT NULL,
+  traceability_status VARCHAR(128) NOT NULL,
+  KEY idx_agent_memory_cluster (pain_cluster_id)
+)`;
+
+
 const OPPORTUNITY_FIELDS = [
   "opportunity_id",
   "run_id",
@@ -141,6 +158,7 @@ export function getConnection(urlString = process.env.TIDB_DATABASE_URL) {
 export async function ensureTables(conn) {
   await conn.execute(OPPORTUNITY_TABLE_SQL);
   await conn.execute(PRDS_TABLE_SQL);
+  await conn.execute(AGENT_MEMORY_TABLE_SQL);
 }
 
 export function parseJsonArgument(raw, label = "input") {
