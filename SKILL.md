@@ -1,10 +1,17 @@
 ---
-name: painpoint-to-mvp
-description: discover and structure product opportunities from public user discussions, then convert a selected opportunity into a lightweight prd for a coding agent. use when the user wants to mine reddit or hacker news for recurring pain points, unmet needs, competitor complaints, or market signals around an idea, user group, or product category, or when the user wants to turn one identified opportunity into a scoped brief for codex or claude code.
+name: pain2mvp
+description: Discover and structure product opportunities from public user discussions, then convert top opportunities into a lightweight PRD for a coding agent. Use when the user needs direction on what to build, or wants to find recurring pain points, unmet needs, competitor complaints, or market signals around an idea, user group, or product category.
 version: 0.1.0
 metadata:
   openclaw:
-    skillKey: painpoint-to-mvp
+    install:
+      - kind: brew
+        formula: jq
+        bins: [jq]
+      - kind: node
+        package: typescript
+        bins: [tsc]
+    skillKey: pain2mvp
     requires:
       bins:
         - node
@@ -26,7 +33,6 @@ If the user asks for both, discovery comes first.
 ## Hard Rules
 
 - `references/contracts.md` is the only runtime contract reference.
-- Do not read `pain2mvp/scripts/*` during normal runs.
 - Only inspect scripts when a documented helper command fails unexpectedly or when explicitly modifying this skill.
 - Read `references/contracts.md` once per run, not repeatedly.
 
@@ -60,7 +66,7 @@ Use the single-row save commands only for manual recovery or compatibility flows
 
 1. Read `references/contracts.md` once.
 2. Check required environment.
-3. Collect evidence with the configured Bright Data tools.
+3. Collect evidence with search/scraping tools or skills (e.g. bundled websearch, meirkad/bright-data, buksan1950/reddit-readonly).
 4. Persist all evidence with `save-evidence-batch`.
 5. Cluster and rank opportunities using the contract rubric.
 6. Persist ranked opportunities with `save-opportunity-batch`.

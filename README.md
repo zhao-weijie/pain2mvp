@@ -4,10 +4,11 @@ OpenClaw skill for turning public user pain points into ranked opportunities and
 
 ## Install
 
-1. Clone this repo into your OpenClaw skills directory.
-2. Run `npm install`.
-3. Set `TIDB_DATABASE_URL` to your TiDB Cloud Zero database URL with `?sslaccept=strict`.
-4. Run `npm run bootstrap:tidb`.
+1. Install this skill via ClawHub.
+2. Navigate to your local skills directory for this skill.
+3. Run `npm install` to install local dependencies.
+4. Set `TIDB_DATABASE_URL` to your TiDB Cloud Zero database URL with `?sslaccept=strict`.
+5. Run `npm run bootstrap:tidb` to initialize tables.
 
 ## Use
 
@@ -17,4 +18,4 @@ OpenClaw skill for turning public user pain points into ranked opportunities and
 - PRD mode: ask for a PRD from a persisted opportunity id or latest high-confidence result.
 - Example: "Generate a PRD from opportunity `opp_20260328_01`."
 
-See `pain2mvp/SKILL.md` for runtime flow and `pain2mvp/references/contracts.md` for the command contract.
+See `SKILL.md` for runtime flow and `references/contracts.md` for the command contract.
