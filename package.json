@@ -4,10 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "bootstrap:tidb": "node scripts/bootstrap_tidb.mjs",
-    "tidb": "node scripts/tidb_tool.mjs"
-  },
-  "dependencies": {
-    "@tidbcloud/serverless": "^0.3.0"
+    "bootstrap:db": "node scripts/bootstrap_db.mjs",
+    "db": "node scripts/db_tool.mjs"
   }
 }

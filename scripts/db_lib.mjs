@@ -1,67 +1,58 @@
 import fs from "node:fs/promises";
 import { stdin as input } from "node:process";
-import { connect } from "@tidbcloud/serverless";
-
-export const REQUIRED_URL_PARAM = "sslaccept";
-export const REQUIRED_URL_VALUE = "strict";
+import { DatabaseSync } from "node:sqlite";
 
 export const OPPORTUNITY_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS opportunity_snapshots (
-  opportunity_id VARCHAR(64) PRIMARY KEY,
-  run_id VARCHAR(64) NOT NULL,
-  \`rank\` INT NOT NULL,
-  title VARCHAR(255) NOT NULL,
+  opportunity_id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  \`rank\` INTEGER NOT NULL,
+  title TEXT NOT NULL,
   affected_user TEXT NOT NULL,
   job_to_be_done TEXT NOT NULL,
   pain_statement TEXT NOT NULL,
-  score_total INT NOT NULL,
-  score_breakdown_json JSON NOT NULL,
-  confidence VARCHAR(16) NOT NULL,
+  score_total INTEGER NOT NULL,
+  score_breakdown_json TEXT NOT NULL,
+  confidence TEXT NOT NULL,
   confidence_reason TEXT NOT NULL,
-  pain_cluster_key VARCHAR(128) NOT NULL,
-  supporting_evidence_json JSON NOT NULL,
-  contradictions_json JSON NOT NULL,
-  query_scope_json JSON NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uniq_run_rank (run_id, \`rank\`),
-  KEY idx_run_created (run_id, created_at),
-  KEY idx_cluster (pain_cluster_key)
+  pain_cluster_key TEXT NOT NULL,
+  supporting_evidence_json TEXT NOT NULL,
+  contradictions_json TEXT NOT NULL,
+  query_scope_json TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (run_id, \`rank\`)
 )`;
 
 export const PRDS_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS prds (
-  prd_id VARCHAR(64) PRIMARY KEY,
-  run_id VARCHAR(64) NOT NULL,
-  opportunity_id VARCHAR(64) NOT NULL,
-  title VARCHAR(255) NOT NULL,
-  status VARCHAR(32) NOT NULL,
+  prd_id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  opportunity_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL,
   target_user TEXT NOT NULL,
   goal TEXT NOT NULL,
-  structured_prd_json JSON NOT NULL,
-  markdown_snapshot LONGTEXT NOT NULL,
-  source_evidence_json JSON NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  KEY idx_prds_run_created (run_id, created_at),
-  KEY idx_prds_opp_created (opportunity_id, created_at)
+  structured_prd_json TEXT NOT NULL,
+  markdown_snapshot TEXT NOT NULL,
+  source_evidence_json TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )`;
 
 export const AGENT_MEMORY_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS agent_memory (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   source_url TEXT NOT NULL,
-  source_type VARCHAR(128) NOT NULL,
-  author_handle VARCHAR(255) NOT NULL,
-  community_or_site VARCHAR(255) NOT NULL,
-  published_at VARCHAR(128) NOT NULL,
+  source_type TEXT NOT NULL,
+  author_handle TEXT NOT NULL,
+  community_or_site TEXT NOT NULL,
+  published_at TEXT NOT NULL,
   snippet TEXT NOT NULL,
-  pain_cluster_id VARCHAR(128) NOT NULL,
-  engagement_signals JSON NOT NULL,
-  retrieval_timestamp VARCHAR(128) NOT NULL,
-  traceability_status VARCHAR(128) NOT NULL,
-  KEY idx_agent_memory_cluster (pain_cluster_id)
+  pain_cluster_id TEXT NOT NULL,
+  engagement_signals TEXT NOT NULL,
+  retrieval_timestamp TEXT NOT NULL,
+  traceability_status TEXT NOT NULL
 )`;
-
 
 const OPPORTUNITY_FIELDS = [
   "opportunity_id",
@@ -118,47 +109,48 @@ export function fail(message, details) {
   throw error;
 }
 
-export function parseTidbUrl(urlString) {
-  if (!urlString) {
-    fail("Missing TIDB_DATABASE_URL");
+class DbConnection {
+  constructor(db) {
+    this.db = db;
   }
-
-  let url;
-  try {
-    url = new URL(urlString);
-  } catch {
-    fail("Invalid TIDB_DATABASE_URL");
+  
+  async execute(sql, params = []) {
+    const isSelect = sql.trim().toUpperCase().startsWith('SELECT');
+    const stmt = this.db.prepare(sql);
+    if (isSelect) {
+      return stmt.all(...params);
+    } else {
+      const result = stmt.run(...params);
+      return result;
+    }
   }
-
-  if (url.protocol !== "mysql:") {
-    fail("TIDB_DATABASE_URL must use the mysql:// scheme");
-  }
-
-  const databaseName = url.pathname.replace(/^\//, "");
-  if (!databaseName) {
-    fail("TIDB_DATABASE_URL must include a database name");
-  }
-
-  const sslAccept = url.searchParams.get(REQUIRED_URL_PARAM);
-  if (sslAccept !== REQUIRED_URL_VALUE) {
-    fail("TIDB_DATABASE_URL must include ?sslaccept=strict");
-  }
-
-  return {
-    urlString,
-    databaseName,
-  };
 }
 
-export function getConnection(urlString = process.env.TIDB_DATABASE_URL) {
-  const { urlString: normalizedUrl } = parseTidbUrl(urlString);
-  return connect({ url: normalizedUrl });
+export async function getConnection(dbPath = process.env.SQLITE_DB_PATH || "./pain2mvp.db") {
+  const db = new DatabaseSync(dbPath);
+  return new DbConnection(db);
 }
 
 export async function ensureTables(conn) {
   await conn.execute(OPPORTUNITY_TABLE_SQL);
+  await conn.execute(`CREATE INDEX IF NOT EXISTS idx_run_created ON opportunity_snapshots(run_id, created_at)`);
+  await conn.execute(`CREATE INDEX IF NOT EXISTS idx_cluster ON opportunity_snapshots(pain_cluster_key)`);
+  
   await conn.execute(PRDS_TABLE_SQL);
+  await conn.execute(`CREATE INDEX IF NOT EXISTS idx_prds_run_created ON prds(run_id, created_at)`);
+  await conn.execute(`CREATE INDEX IF NOT EXISTS idx_prds_opp_created ON prds(opportunity_id, created_at)`);
+  
   await conn.execute(AGENT_MEMORY_TABLE_SQL);
+  await conn.execute(`CREATE INDEX IF NOT EXISTS idx_agent_memory_cluster ON agent_memory(pain_cluster_id)`);
+  
+  await conn.execute(`
+    CREATE TRIGGER IF NOT EXISTS prds_updated_at_trigger
+    AFTER UPDATE ON prds
+    FOR EACH ROW
+    BEGIN
+      UPDATE prds SET updated_at = CURRENT_TIMESTAMP WHERE prd_id = NEW.prd_id;
+    END;
+  `);
 }
 
 export function parseJsonArgument(raw, label = "input") {
@@ -288,7 +280,7 @@ async function insertEvidenceRow(conn, row) {
       engagement_signals,
       retrieval_timestamp,
       traceability_status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.source_url,
       row.source_type,
@@ -300,7 +292,7 @@ async function insertEvidenceRow(conn, row) {
       row.engagement_signals,
       row.retrieval_timestamp,
       row.traceability_status,
-    ],
+    ]
   );
 }
 
@@ -348,22 +340,22 @@ async function upsertOpportunityRow(conn, row) {
       supporting_evidence_json,
       contradictions_json,
       query_scope_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, ?, ?, CAST(? AS JSON), CAST(? AS JSON), CAST(? AS JSON))
-    ON DUPLICATE KEY UPDATE
-      run_id = VALUES(run_id),
-      \`rank\` = VALUES(\`rank\`),
-      title = VALUES(title),
-      affected_user = VALUES(affected_user),
-      job_to_be_done = VALUES(job_to_be_done),
-      pain_statement = VALUES(pain_statement),
-      score_total = VALUES(score_total),
-      score_breakdown_json = VALUES(score_breakdown_json),
-      confidence = VALUES(confidence),
-      confidence_reason = VALUES(confidence_reason),
-      pain_cluster_key = VALUES(pain_cluster_key),
-      supporting_evidence_json = VALUES(supporting_evidence_json),
-      contradictions_json = VALUES(contradictions_json),
-      query_scope_json = VALUES(query_scope_json)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(opportunity_id) DO UPDATE SET
+      run_id = excluded.run_id,
+      \`rank\` = excluded.\`rank\`,
+      title = excluded.title,
+      affected_user = excluded.affected_user,
+      job_to_be_done = excluded.job_to_be_done,
+      pain_statement = excluded.pain_statement,
+      score_total = excluded.score_total,
+      score_breakdown_json = excluded.score_breakdown_json,
+      confidence = excluded.confidence,
+      confidence_reason = excluded.confidence_reason,
+      pain_cluster_key = excluded.pain_cluster_key,
+      supporting_evidence_json = excluded.supporting_evidence_json,
+      contradictions_json = excluded.contradictions_json,
+      query_scope_json = excluded.query_scope_json`,
     [
       row.opportunity_id,
       row.run_id,
@@ -380,7 +372,7 @@ async function upsertOpportunityRow(conn, row) {
       row.supporting_evidence_json,
       row.contradictions_json,
       row.query_scope_json,
-    ],
+    ]
   );
 }
 
@@ -445,17 +437,17 @@ export async function savePrd(conn, payload) {
       structured_prd_json,
       markdown_snapshot,
       source_evidence_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), ?, CAST(? AS JSON))
-    ON DUPLICATE KEY UPDATE
-      run_id = VALUES(run_id),
-      opportunity_id = VALUES(opportunity_id),
-      title = VALUES(title),
-      status = VALUES(status),
-      target_user = VALUES(target_user),
-      goal = VALUES(goal),
-      structured_prd_json = VALUES(structured_prd_json),
-      markdown_snapshot = VALUES(markdown_snapshot),
-      source_evidence_json = VALUES(source_evidence_json)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(prd_id) DO UPDATE SET
+      run_id = excluded.run_id,
+      opportunity_id = excluded.opportunity_id,
+      title = excluded.title,
+      status = excluded.status,
+      target_user = excluded.target_user,
+      goal = excluded.goal,
+      structured_prd_json = excluded.structured_prd_json,
+      markdown_snapshot = excluded.markdown_snapshot,
+      source_evidence_json = excluded.source_evidence_json`,
     [
       row.prd_id,
       row.run_id,
@@ -467,7 +459,7 @@ export async function savePrd(conn, payload) {
       row.structured_prd_json,
       row.markdown_snapshot,
       row.source_evidence_json,
-    ],
+    ]
   );
 
   return {
@@ -510,7 +502,7 @@ export async function listRuns(conn) {
     `SELECT run_id, COUNT(*) AS opportunity_count, MAX(created_at) AS last_created_at
      FROM opportunity_snapshots
      GROUP BY run_id
-     ORDER BY last_created_at DESC`,
+     ORDER BY last_created_at DESC`
   );
   return rows;
 }

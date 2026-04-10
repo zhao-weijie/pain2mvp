@@ -13,9 +13,6 @@ metadata:
       bins:
         - node
         - npm
-      env:
-        - TIDB_DATABASE_URL
-    primaryEnv: TIDB_DATABASE_URL
 ---
 
 # Painpoint To MVP
@@ -37,18 +34,18 @@ If the user asks for both, discovery comes first.
 
 Use these commands for normal operation:
 
-- `npm run bootstrap:tidb`
-- `npm run tidb -- save-evidence-batch`
-- `npm run tidb -- save-opportunity-batch`
-- `npm run tidb -- get-opportunity`
-- `npm run tidb -- save-prd`
-- `npm run tidb -- get-prd`
-- `npm run tidb -- list-runs`
+- `npm run bootstrap:db`
+- `npm run db -- save-evidence-batch`
+- `npm run db -- save-opportunity-batch`
+- `npm run db -- get-opportunity`
+- `npm run db -- save-prd`
+- `npm run db -- get-prd`
+- `npm run db -- list-runs`
 
 Compatibility-only commands:
 
-- `npm run tidb -- save-evidence`
-- `npm run tidb -- save-opportunity`
+- `npm run db -- save-evidence`
+- `npm run db -- save-opportunity`
 
 Use the single-row save commands only for manual recovery or compatibility flows.
 

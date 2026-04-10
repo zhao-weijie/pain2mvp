@@ -1,4 +1,4 @@
-import { dispatchCommand, getConnection, printError, printJson, readCommandInput } from "./tidb_lib.mjs";
+import { dispatchCommand, getConnection, printError, printJson, readCommandInput } from "./db_lib.mjs";
 
 try {
   const command = process.argv[2];
@@ -7,7 +7,8 @@ try {
   }
 
   const payload = await readCommandInput(process.argv.slice(3));
-  const conn = getConnection();
+  const dbPath = process.env.SQLITE_DB_PATH || "./pain2mvp.db";
+  const conn = await getConnection(dbPath);
   const result = await dispatchCommand(conn, command, payload);
   printJson({
     ok: true,
