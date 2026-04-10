@@ -38,6 +38,7 @@ Use these commands for normal operation:
 - `npm run db -- save-evidence-batch`
 - `npm run db -- save-opportunity-batch`
 - `npm run db -- get-opportunity`
+- `npm run db -- search-similar-evidence`
 - `npm run db -- save-prd`
 - `npm run db -- get-prd`
 - `npm run db -- list-runs`
@@ -60,8 +61,8 @@ Use the single-row save commands only for manual recovery or compatibility flows
 
 1. Read `references/contracts.md` once.
 2. Check required environment.
-3. Collect evidence with search/scraping tools or skills (e.g. bundled websearch, meirkad/bright-data, buksan1950/reddit-readonly).
-4. Persist all evidence with `save-evidence-batch`.
+3. Collect evidence with search/scraping tools or skills. Search vector memory (`search-similar-evidence`) to deduplicate or expand context.
+4. Persist all evidence with `save-evidence-batch` (optionally including `embedding_json`).
 5. Cluster and rank opportunities using the contract rubric.
 6. Persist ranked opportunities with `save-opportunity-batch`.
 7. Return a ranked summary with `run_id`, `opportunity_id`, score, confidence, and caveats.

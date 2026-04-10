@@ -6,5 +6,8 @@
   "scripts": {
     "bootstrap:db": "node scripts/bootstrap_db.mjs",
     "db": "node scripts/db_tool.mjs"
+  },
+  "dependencies": {
+    "sqlite-vec": "^0.1.9"
   }
 }

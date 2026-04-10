@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { stdin as input } from "node:process";
 import { DatabaseSync } from "node:sqlite";
+import * as sqliteVec from "sqlite-vec";
 
 export const OPPORTUNITY_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS opportunity_snapshots (
@@ -128,6 +129,12 @@ class DbConnection {
 
 export async function getConnection(dbPath = process.env.SQLITE_DB_PATH || "./pain2mvp.db") {
   const db = new DatabaseSync(dbPath);
+  try {
+    sqliteVec.load(db);
+  } catch (e) {
+    // Graceful fallback for environments not supporting native Extension loading on init
+    console.warn("sqlite-vec extension loading suppressed or failed:", e.message);
+  }
   return new DbConnection(db);
 }
 
@@ -143,6 +150,13 @@ export async function ensureTables(conn) {
   await conn.execute(AGENT_MEMORY_TABLE_SQL);
   await conn.execute(`CREATE INDEX IF NOT EXISTS idx_agent_memory_cluster ON agent_memory(pain_cluster_id)`);
   
+  await conn.execute(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS agent_memory_vec USING vec0(
+      evidence_id INTEGER PRIMARY KEY,
+      embedding float[1536]
+    )
+  `);
+
   await conn.execute(`
     CREATE TRIGGER IF NOT EXISTS prds_updated_at_trigger
     AFTER UPDATE ON prds
@@ -218,6 +232,7 @@ export function normalizeEvidenceRow(payload) {
   return {
     ...payload,
     engagement_signals: normalizeJsonField(payload.engagement_signals, "engagement_signals"),
+    embedding_json: payload.embedding_json ? normalizeJsonField(payload.embedding_json, "embedding_json") : null,
   };
 }
 
@@ -268,7 +283,7 @@ export function normalizePrdRecord(payload) {
 }
 
 async function insertEvidenceRow(conn, row) {
-  await conn.execute(
+  const result = await conn.execute(
     `INSERT INTO agent_memory (
       source_url,
       source_type,
@@ -294,6 +309,15 @@ async function insertEvidenceRow(conn, row) {
       row.traceability_status,
     ]
   );
+  
+  if (row.embedding_json) {
+    const embeddingArray = JSON.parse(row.embedding_json);
+    const float32Arr = new Float32Array(embeddingArray);
+    await conn.execute(
+      `INSERT INTO agent_memory_vec (evidence_id, embedding) VALUES (?, ?)`,
+      [result.lastInsertRowid, float32Arr]
+    );
+  }
 }
 
 export async function saveEvidence(conn, payload) {
@@ -319,6 +343,28 @@ export async function saveEvidenceBatch(conn, payload) {
     command: "save-evidence-batch",
     run_id: batch.run_id,
     saved_count: batch.evidence_rows.length,
+  };
+}
+
+export async function searchSimilarEvidence(conn, payload) {
+  requireFields(payload, ["embedding_json", "limit"], "search-similar-evidence");
+  const embeddingArray = JSON.parse(payload.embedding_json);
+  const float32Arr = new Float32Array(embeddingArray);
+  const limit = Number(payload.limit) || 5;
+
+  const rows = await conn.execute(
+    `SELECT am.*, vec_distance_cosine(vec.embedding, ?) AS distance
+     FROM agent_memory_vec vec
+     JOIN agent_memory am ON vec.evidence_id = am.id
+     ORDER BY distance ASC
+     LIMIT ?`,
+    [float32Arr, limit]
+  );
+
+  return {
+    ok: true,
+    command: "search-similar-evidence",
+    results: rows,
   };
 }
 
@@ -513,6 +559,8 @@ export async function dispatchCommand(conn, command, payload) {
       return saveEvidence(conn, payload);
     case "save-evidence-batch":
       return saveEvidenceBatch(conn, payload);
+    case "search-similar-evidence":
+       return searchSimilarEvidence(conn, payload);
     case "save-opportunity":
       return saveOpportunity(conn, payload);
     case "save-opportunity-batch":
