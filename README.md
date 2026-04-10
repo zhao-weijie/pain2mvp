@@ -7,14 +7,15 @@ OpenClaw skill for turning public user pain points into ranked opportunities and
 1. Install this skill via ClawHub.
 2. Navigate to your local skills directory for this skill.
 3. Run `npm install` to install local dependencies.
-4. Set `TIDB_DATABASE_URL` to your TiDB Cloud Zero database URL with `?sslaccept=strict`.
-5. Run `npm run bootstrap:tidb` to initialize tables.
+4. Set `SQLITE_DB_PATH` to your local database location (or leave empty to default to `./pain2mvp.db`).
+5. Run `npm run bootstrap:db` to initialize local data tables and vector indices (`sqlite-vec`).
 
 ## Use
 
 - Discovery mode: ask for top pain points by user group, idea, or existing solution.
 - Example: "What are the top pain points for in-house IP counsel?"
 - Example: "What are OpenClaw users frustrated by?" or "What are Harvey users complaining about?"
+- Features sqlite-vec enabled semantic clustering and deduplication over collected pain points.
 - PRD mode: ask for a PRD from a persisted opportunity id or latest high-confidence result.
 - Example: "Generate a PRD from opportunity `opp_20260328_01`."
 
