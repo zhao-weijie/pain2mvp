@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { stdin as input } from "node:process";
 import { DatabaseSync } from "node:sqlite";
 import * as sqliteVec from "sqlite-vec";
+import { pipeline } from "@huggingface/transformers";
 
 export const OPPORTUNITY_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS opportunity_snapshots (
@@ -153,7 +154,7 @@ export async function ensureTables(conn) {
   await conn.execute(`
     CREATE VIRTUAL TABLE IF NOT EXISTS agent_memory_vec USING vec0(
       evidence_id INTEGER PRIMARY KEY,
-      embedding float[1536]
+      embedding float[384]
     )
   `);
 
@@ -165,6 +166,17 @@ export async function ensureTables(conn) {
       UPDATE prds SET updated_at = CURRENT_TIMESTAMP WHERE prd_id = NEW.prd_id;
     END;
   `);
+}
+
+let extractor = null;
+async function getEmbedding(text) {
+  if (!extractor) {
+    extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", {
+      quantized: true,
+    });
+  }
+  const result = await extractor(text, { pooling: "mean", normalize: true });
+  return result.data; // Float32Array 384 length
 }
 
 export function parseJsonArgument(raw, label = "input") {
@@ -232,7 +244,6 @@ export function normalizeEvidenceRow(payload) {
   return {
     ...payload,
     engagement_signals: normalizeJsonField(payload.engagement_signals, "engagement_signals"),
-    embedding_json: payload.embedding_json ? normalizeJsonField(payload.embedding_json, "embedding_json") : null,
   };
 }
 
@@ -310,13 +321,16 @@ async function insertEvidenceRow(conn, row) {
     ]
   );
   
-  if (row.embedding_json) {
-    const embeddingArray = JSON.parse(row.embedding_json);
-    const float32Arr = new Float32Array(embeddingArray);
-    await conn.execute(
-      `INSERT INTO agent_memory_vec (evidence_id, embedding) VALUES (?, ?)`,
-      [result.lastInsertRowid, float32Arr]
-    );
+  if (row.snippet) {
+    try {
+      const float32Arr = await getEmbedding(row.snippet);
+      await conn.execute(
+        `INSERT INTO agent_memory_vec (evidence_id, embedding) VALUES (?, ?)`,
+        [result.lastInsertRowid, float32Arr]
+      );
+    } catch (e) {
+      console.warn("Embedding generation failed for row snippet:", e.message);
+    }
   }
 }
 
@@ -347,10 +361,15 @@ export async function saveEvidenceBatch(conn, payload) {
 }
 
 export async function searchSimilarEvidence(conn, payload) {
-  requireFields(payload, ["embedding_json", "limit"], "search-similar-evidence");
-  const embeddingArray = JSON.parse(payload.embedding_json);
-  const float32Arr = new Float32Array(embeddingArray);
+  requireFields(payload, ["query"], "search-similar-evidence");
   const limit = Number(payload.limit) || 5;
+
+  let float32Arr;
+  try {
+    float32Arr = await getEmbedding(payload.query);
+  } catch (err) {
+    fail(`Failed to generate query embedding: ${err.message}`);
+  }
 
   const rows = await conn.execute(
     `SELECT am.*, vec_distance_cosine(vec.embedding, ?) AS distance

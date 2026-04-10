@@ -8,6 +8,7 @@
     "db": "node scripts/db_tool.mjs"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.0.1",
     "sqlite-vec": "^0.1.9"
   }
 }

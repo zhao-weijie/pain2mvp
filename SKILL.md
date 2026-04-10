@@ -1,18 +1,16 @@
 ---
 name: pain2mvp
 description: Discover and structure product opportunities from public user discussions, then convert top opportunities into a lightweight PRD for a coding agent. Use when the user needs direction on what to build, or wants to find recurring pain points, unmet needs, competitor complaints, or market signals around an idea, user group, or product category.
-version: 1.0.2
+version: 1.0.3
 metadata:
   openclaw:
-    install:
-      - kind: brew
-        formula: jq
-        bins: [jq]
     skillKey: pain2mvp
     requires:
       bins:
         - node
         - npm
+    emoji: "🔬"
+    homepage: "https://github.com/zhao-weijie/pain2mvp"
 ---
 
 # Painpoint To MVP
@@ -61,9 +59,9 @@ Use the single-row save commands only for manual recovery or compatibility flows
 
 1. Read `references/contracts.md` once.
 2. Check required environment.
-3. Collect evidence with search/scraping tools or skills. Search vector memory (`search-similar-evidence`) to deduplicate or expand context.
-4. Persist all evidence with `save-evidence-batch` (optionally including `embedding_json`).
-5. Cluster and rank opportunities using the contract rubric.
+3. Collect evidence using your own search/scraping tools. You may use the `search-similar-evidence` command (passing a `query` string payload representing the pain point) to check if a pain point is a duplicate or fits an existing cluster. The database will automatically generate vector embeddings for string inputs.
+4. Persist new evidence with `save-evidence-batch`. The database will automatically process semantic dimensions for the saved `.snippet` content.
+5. You (the agent) must manually evaluate the stored evidence in your context, cluster it into distinct problems, and score/rank the opportunities using the contract rubric. There is no automated script for this.
 6. Persist ranked opportunities with `save-opportunity-batch`.
 7. Return a ranked summary with `run_id`, `opportunity_id`, score, confidence, and caveats.
 
